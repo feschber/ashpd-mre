@@ -29,7 +29,7 @@ dependencies = [
 [[package]]
 name = "ashpd"
 version = "0.7.0"
-source = "git+https://github.com/bilelmoussaoui/ashpd#1da9ed3d85d7cfc4b76f602bbcb597f958e971bd"
+source = "git+https://github.com/feschber/ashpd?branch=fix-once-cell-panic#6a7e3eafe1a36dda005baf5041781129a7977c94"
 dependencies = [
  "enumflags2",
  "futures-channel",
