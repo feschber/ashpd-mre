@@ -98,6 +98,18 @@ async fn ic() -> Result<()> {
     let context = ei::Context::new(stream)?;
     context.flush()?;
 
+    let mut event_stream = EiEventStream::new(context.clone())?;
+    let _handshake = match reis::tokio::ei_handshake(
+        &mut event_stream,
+        "lan-mouse",
+        ei::handshake::ContextType::Receiver,
+        &INTERFACES,
+    ).await {
+        Ok(res) => res,
+        Err(e) => return Err(anyhow!("ei handshake failed: {e:?}")),
+    };
+    let mut event_stream = EiConvertEventStream::new(event_stream);
+
     loop {
         let activated: Activated = loop {
             log::debug!("receiving activation token ...");
@@ -114,19 +126,6 @@ async fn ic() -> Result<()> {
             }
         };
         log::info!("activated: {activated:?}");
-
-        let mut event_stream = EiEventStream::new(context.clone())?;
-        let _handshake = match reis::tokio::ei_handshake(
-            &mut event_stream,
-            "lan-mouse",
-            ei::handshake::ContextType::Receiver,
-            &INTERFACES,
-        ).await {
-            Ok(res) => res,
-            Err(e) => return Err(anyhow!("ei handshake failed: {e:?}")),
-        };
-
-        let mut event_stream = EiConvertEventStream::new(event_stream);
         let mut i = 0;
         loop {
             let ei_event = event_stream.next().await.unwrap().unwrap();
