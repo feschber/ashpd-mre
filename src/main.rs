@@ -16,6 +16,9 @@ pub enum Position {
 
 #[tokio::main(flavor="current_thread")]
 async fn main() {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     ic().await.unwrap();
 }
 
@@ -61,7 +64,7 @@ async fn ic() -> Result<()> {
         .unwrap();
 
     // create input capture session
-    log::debug!("creating input capture session");
+    log::info!("creating input capture session");
     let (session, _cap) = input_capture
         .create_session(
             &ashpd::WindowIdentifier::default(),
@@ -69,22 +72,22 @@ async fn ic() -> Result<()> {
         )
         .await?;
 
-    log::debug!("selecting zones");
+    log::info!("selecting zones");
     let zones = input_capture.zones(&session).await?.response()?;
-    log::debug!("{zones:?}");
+    log::info!("{zones:?}");
     // FIXME: position
     let barriers = select_barriers(&zones, Position::Left);
 
-    log::debug!("selecting barriers: {barriers:?}");
+    log::info!("selecting barriers: {barriers:?}");
     input_capture
         .set_pointer_barriers(&session, &barriers, zones.zone_set())
         .await?;
 
     // connect to eis server
-    log::debug!("connect_to_eis");
+    log::info!("connect_to_eis");
     let fd = input_capture.connect_to_eis(&session).await?;
 
-    log::debug!("enabling session");
+    log::info!("enabling session");
     input_capture.enable(&session).await?;
 
     let mut activated = input_capture.receive_all_signals().await?;
@@ -112,7 +115,7 @@ async fn ic() -> Result<()> {
 
     loop {
         let activated: Activated = loop {
-            log::debug!("receiving activation token ...");
+            log::info!("receiving activation token ...");
             let signal = activated.next().await.ok_or(anyhow!("expected activate signal"))?;
             // break signal;
             log::info!("{signal:?}");
@@ -129,7 +132,7 @@ async fn ic() -> Result<()> {
         let mut i = 0;
         loop {
             let ei_event = event_stream.next().await.unwrap().unwrap();
-            log::debug!("{ei_event:?}");
+            log::info!("{ei_event:?}");
 
             /* just for debugging break out of the loop after 100 events */
             i += 1;
@@ -138,7 +141,7 @@ async fn ic() -> Result<()> {
             }
         }
 
-        log::debug!("releasing input capture");
+        log::info!("releasing input capture");
         input_capture.release(&session, activated.activation_id(), (100., 100.)).await.unwrap();
     }
 }
