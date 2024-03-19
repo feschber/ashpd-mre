@@ -1,8 +1,13 @@
 use anyhow::{anyhow, Result};
-use ashpd::desktop::input_capture::{Barrier, Capabilities, InputCapture, Zones, Activated};
-use futures::StreamExt;
-use reis::{tokio::{EiConvertEventStream, EiEventStream}, ei};
-use std::{collections::HashMap, os::unix::net::UnixStream};
+use ashpd::desktop::input_capture::{Barrier, Capabilities, InputCapture, Zones};
+use futures::{StreamExt, TryStreamExt};
+use reis::{
+    ei,
+    event::{DeviceCapability, EiEvent},
+    tokio::{EiConvertEventStream, EiEventStream},
+};
+use std::{collections::HashMap, os::unix::net::UnixStream, time::Duration};
+use tokio;
 
 use once_cell::sync::Lazy;
 
@@ -13,8 +18,7 @@ pub enum Position {
     Bottom,
 }
 
-
-#[tokio::main(flavor="current_thread")]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
@@ -49,7 +53,7 @@ fn select_barriers(zones: &Zones, pos: Position) -> Vec<Barrier> {
             let (width, height) = (r.width() as i32, r.height() as i32);
             let barrier_pos = match pos {
                 Position::Left => (x, y, x, y + height - 1), // start pos, end pos, inclusive
-                Position::Right => (x + width - 1, y, x + width - 1, y + height - 1),
+                Position::Right => (x + width, y, x + width, y + height - 1),
                 Position::Top => (x, y, x + width - 1, y),
                 Position::Bottom => (x, y + height - 1, x + width - 1, y + height - 1),
             };
@@ -59,39 +63,26 @@ fn select_barriers(zones: &Zones, pos: Position) -> Vec<Barrier> {
 }
 
 async fn ic() -> Result<()> {
-    let input_capture = InputCapture::new()
-        .await
-        .unwrap();
+    // terminate automatically after 10 seconds
+    tokio::task::spawn(async {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        std::process::exit(1);
+    });
+
+    let input_capture = InputCapture::new().await.unwrap();
 
     // create input capture session
     log::info!("creating input capture session");
     let (session, _cap) = input_capture
         .create_session(
             &ashpd::WindowIdentifier::default(),
-            (Capabilities::Keyboard | Capabilities::Pointer | Capabilities::Touchscreen).into(),
+            Capabilities::Keyboard | Capabilities::Pointer | Capabilities::Touchscreen,
         )
-        .await?;
-
-    log::info!("selecting zones");
-    let zones = input_capture.zones(&session).await?.response()?;
-    log::info!("{zones:?}");
-    // FIXME: position
-    let barriers = select_barriers(&zones, Position::Left);
-
-    log::info!("selecting barriers: {barriers:?}");
-    input_capture
-        .set_pointer_barriers(&session, &barriers, zones.zone_set())
         .await?;
 
     // connect to eis server
     log::info!("connect_to_eis");
     let fd = input_capture.connect_to_eis(&session).await?;
-
-    log::info!("enabling session");
-    input_capture.enable(&session).await?;
-
-    let mut activated = input_capture.receive_all_signals().await?;
-    // let mut activated = input_capture.receive_activated().await?;
 
     // create unix stream from fd
     let stream = UnixStream::from(fd);
@@ -104,44 +95,84 @@ async fn ic() -> Result<()> {
     let mut event_stream = EiEventStream::new(context.clone())?;
     let _handshake = match reis::tokio::ei_handshake(
         &mut event_stream,
-        "lan-mouse",
+        "ashpd-mre",
         ei::handshake::ContextType::Receiver,
         &INTERFACES,
-    ).await {
+    )
+    .await
+    {
         Ok(res) => res,
         Err(e) => return Err(anyhow!("ei handshake failed: {e:?}")),
     };
+
     let mut event_stream = EiConvertEventStream::new(event_stream);
 
-    loop {
-        let activated: Activated = loop {
-            log::info!("receiving activation token ...");
-            let signal = activated.next().await.ok_or(anyhow!("expected activate signal"))?;
-            // break signal;
-            log::info!("{signal:?}");
-            if let Some(member) = signal.header().member() {
-                if member == "Activated" {
-                    let body = signal.body();
-                    let activated: Activated = body.deserialize()
-                        .expect("failed to deserialize body");
-                    break activated;
-                }
-            }
-        };
+    log::info!("selecting zones");
+    let zones = input_capture.zones(&session).await?.response()?;
+    log::info!("{zones:?}");
+    // FIXME: position
+    let barriers = select_barriers(&zones, Position::Left);
+
+    log::info!("selecting barriers: {barriers:?}");
+    input_capture
+        .set_pointer_barriers(&session, &barriers, zones.zone_set())
+        .await?;
+
+    log::info!("enabling session");
+    input_capture.enable(&session).await?;
+
+    let mut activate_stream = input_capture.receive_activated().await?;
+
+    for i in 0.. {
+        // disable and reenable after 6th round
+        if i == 6 {
+            // I dont know why this causes input capture to no longer send any events...
+            log::info!("-------------DISABLE-------------");
+            input_capture.disable(&session).await?;
+            log::info!("-------------ENABLE--------------");
+            input_capture.enable(&session).await?;
+        }
+
+        log::error!("CAPTURE {i}");
+        let activated = activate_stream
+            .next()
+            .await
+            .ok_or(anyhow!("expected activate signal"))?;
         log::info!("activated: {activated:?}");
         let mut i = 0;
         loop {
             let ei_event = event_stream.next().await.unwrap().unwrap();
-            log::info!("{ei_event:?}");
+            log::info!("ei event: {ei_event:?}");
+            if let EiEvent::SeatAdded(seat_event) = &ei_event {
+                seat_event.seat.bind_capabilities(&[
+                    DeviceCapability::Pointer,
+                    DeviceCapability::PointerAbsolute,
+                    DeviceCapability::Keyboard,
+                    DeviceCapability::Touch,
+                    DeviceCapability::Scroll,
+                    DeviceCapability::Button,
+                ]);
+                context.flush().unwrap();
+            }
+            if let EiEvent::DeviceAdded(_) = &ei_event {
+                break;
+            }
 
             /* just for debugging break out of the loop after 100 events */
             i += 1;
-            if i == 100 {
+            if i == 20 {
                 break;
             }
         }
 
         log::info!("releasing input capture");
-        input_capture.release(&session, activated.activation_id(), (100., 100.)).await.unwrap();
+        let (x, y) = activated.cursor_position();
+        let cp = (x as f64 + 10., y as f64);
+        input_capture
+            .release(&session, activated.activation_id(), cp)
+            .await
+            .unwrap();
     }
+
+    Ok(())
 }
