@@ -5,10 +5,9 @@ use reis::{
     event::{DeviceCapability, EiEvent, KeyboardKey},
     tokio::{EiConvertEventStream, EiEventStream},
 };
-use std::{collections::HashMap, os::unix::net::UnixStream, time::Duration};
+use std::{collections::HashMap, os::unix::net::UnixStream, sync::OnceLock, time::Duration};
 use tokio;
 
-use once_cell::sync::Lazy;
 
 #[allow(unused)]
 enum Position {
@@ -18,21 +17,7 @@ enum Position {
     Bottom,
 }
 
-static INTERFACES: Lazy<HashMap<&'static str, u32>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    m.insert("ei_connection", 1);
-    m.insert("ei_callback", 1);
-    m.insert("ei_pingpong", 1);
-    m.insert("ei_seat", 1);
-    m.insert("ei_device", 2);
-    m.insert("ei_pointer", 1);
-    m.insert("ei_pointer_absolute", 1);
-    m.insert("ei_scroll", 1);
-    m.insert("ei_button", 1);
-    m.insert("ei_keyboard", 1);
-    m.insert("ei_touchscreen", 1);
-    m
-});
+static INTERFACES: OnceLock<HashMap<&'static str, u32>> = OnceLock::new();
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ashpd::Result<()> {
@@ -64,11 +49,26 @@ async fn main() -> ashpd::Result<()> {
     context.flush().unwrap();
 
     let mut event_stream = EiEventStream::new(context.clone())?;
+    let interfaces = INTERFACES.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert("ei_connection", 1);
+        m.insert("ei_callback", 1);
+        m.insert("ei_pingpong", 1);
+        m.insert("ei_seat", 1);
+        m.insert("ei_device", 2);
+        m.insert("ei_pointer", 1);
+        m.insert("ei_pointer_absolute", 1);
+        m.insert("ei_scroll", 1);
+        m.insert("ei_button", 1);
+        m.insert("ei_keyboard", 1);
+        m.insert("ei_touchscreen", 1);
+        m
+    });
     let response = reis::tokio::ei_handshake(
         &mut event_stream,
         "ashpd-mre",
         ei::handshake::ContextType::Receiver,
-        &INTERFACES,
+        interfaces,
     )
     .await
     .expect("ei handshake failed");

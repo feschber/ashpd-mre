@@ -11,7 +11,6 @@ ashpd = { git = "https://github.com/feschber/ashpd", default-features = false, f
 futures = "0.3.30"
 futures-core = "0.3.30"
 log = "0.4.21"
-once_cell = "1.19.0"
 reis = { version = "0.2.0", features = [ "tokio" ] }
 tokio = { version = "1.35.1", features = ["io-util", "macros", "time"] }
 env_logger = "0.10.0"

@@ -58,7 +58,6 @@ dependencies = [
  "futures",
  "futures-core",
  "log",
- "once_cell",
  "reis",
  "tokio",
 ]
