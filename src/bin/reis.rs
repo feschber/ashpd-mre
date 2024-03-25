@@ -64,7 +64,7 @@ async fn main() -> ashpd::Result<()> {
     context.flush().unwrap();
 
     let mut event_stream = EiEventStream::new(context.clone())?;
-    let _handshake = reis::tokio::ei_handshake(
+    let response = reis::tokio::ei_handshake(
         &mut event_stream,
         "ashpd-mre",
         ei::handshake::ContextType::Receiver,
@@ -73,7 +73,7 @@ async fn main() -> ashpd::Result<()> {
     .await
     .expect("ei handshake failed");
 
-    let mut event_stream = EiConvertEventStream::new(event_stream);
+    let mut event_stream = EiConvertEventStream::new(event_stream, response.serial);
 
     let pos = Position::Left;
     let zones = input_capture.zones(&session).await?.response()?;

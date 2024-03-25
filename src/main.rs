@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use ashpd::desktop::input_capture::{Barrier, Capabilities, InputCapture, Zones};
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use reis::{
     ei,
     event::{DeviceCapability, EiEvent},
@@ -93,7 +93,7 @@ async fn ic() -> Result<()> {
     context.flush()?;
 
     let mut event_stream = EiEventStream::new(context.clone())?;
-    let _handshake = match reis::tokio::ei_handshake(
+    let response = match reis::tokio::ei_handshake(
         &mut event_stream,
         "ashpd-mre",
         ei::handshake::ContextType::Receiver,
@@ -105,7 +105,7 @@ async fn ic() -> Result<()> {
         Err(e) => return Err(anyhow!("ei handshake failed: {e:?}")),
     };
 
-    let mut event_stream = EiConvertEventStream::new(event_stream);
+    let mut event_stream = EiConvertEventStream::new(event_stream, response.serial);
 
     log::info!("selecting zones");
     let zones = input_capture.zones(&session).await?.response()?;
