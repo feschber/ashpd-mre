@@ -1,4 +1,4 @@
-use ashpd::desktop::input_capture::{Barrier, Capabilities, InputCapture};
+use ashpd::desktop::{global_shortcuts::Activated, input_capture::{Barrier, Capabilities, InputCapture}};
 use futures::StreamExt;
 use reis::{
     ei::{self, keyboard::KeyState},
@@ -107,11 +107,13 @@ async fn main() -> ashpd::Result<()> {
 
     input_capture.enable(&session).await?;
 
-    let mut activate_stream = input_capture.receive_activated().await?;
+    let mut activate_stream = input_capture.receive_all_signals().await?;
 
     loop {
+        eprintln!("waiting for activation");
         let activated = activate_stream.next().await.unwrap();
-
+        eprintln!("activated: {activated:?}");
+        let activated: Activated = activated.body().deserialize().unwrap();
         eprintln!("activated: {activated:?}");
         loop {
             let ei_event = event_stream.next().await.unwrap().unwrap();
@@ -140,8 +142,9 @@ async fn main() -> ashpd::Result<()> {
         }
 
         eprintln!("releasing input capture");
-        let (x, y) = activated.cursor_position();
-        let (x, y) = (x as f64, y as f64);
+        // let (x, y) = activated.cursor_position();
+        // let (x, y) = (x as f64, y as f64);
+        let (x, y) = (0., 0.);
         let cursor_pos = match pos {
             Position::Left => (x + 1., y),
             Position::Right => (x - 1., y),
@@ -149,7 +152,7 @@ async fn main() -> ashpd::Result<()> {
             Position::Bottom => (x, y + 1.),
         };
         input_capture
-            .release(&session, activated.activation_id(), cursor_pos)
+            .release(&session, 0, cursor_pos)
             .await?;
     }
 }
