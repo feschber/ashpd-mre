@@ -1,4 +1,4 @@
-use ashpd::desktop::{global_shortcuts::Activated, input_capture::{Barrier, Capabilities, InputCapture}};
+use ashpd::desktop::{input_capture::Activated, input_capture::{Barrier, Capabilities, InputCapture}};
 use futures::StreamExt;
 use reis::{
     ei::{self, keyboard::KeyState},
