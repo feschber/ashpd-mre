@@ -1,3 +1,4 @@
+
 use anyhow::{anyhow, Result};
 use ashpd::desktop::input_capture::{Barrier, Capabilities, InputCapture, Zones};
 use futures::StreamExt;
@@ -6,10 +7,7 @@ use reis::{
     event::{DeviceCapability, EiEvent},
     tokio::{EiConvertEventStream, EiEventStream},
 };
-use std::{collections::HashMap, os::unix::net::UnixStream, time::Duration};
-use tokio;
-
-use once_cell::sync::Lazy;
+use std::{collections::HashMap, os::unix::net::UnixStream, sync::OnceLock, time::Duration};
 
 pub enum Position {
     Left,
@@ -26,21 +24,7 @@ async fn main() {
     ic().await.unwrap();
 }
 
-static INTERFACES: Lazy<HashMap<&'static str, u32>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    m.insert("ei_connection", 1);
-    m.insert("ei_callback", 1);
-    m.insert("ei_pingpong", 1);
-    m.insert("ei_seat", 1);
-    m.insert("ei_device", 2);
-    m.insert("ei_pointer", 1);
-    m.insert("ei_pointer_absolute", 1);
-    m.insert("ei_scroll", 1);
-    m.insert("ei_button", 1);
-    m.insert("ei_keyboard", 1);
-    m.insert("ei_touchscreen", 1);
-    m
-});
+static INTERFACES: OnceLock<HashMap<&'static str, u32>> = OnceLock::new();
 
 fn select_barriers(zones: &Zones, pos: Position) -> Vec<Barrier> {
     zones
@@ -93,11 +77,26 @@ async fn ic() -> Result<()> {
     context.flush()?;
 
     let mut event_stream = EiEventStream::new(context.clone())?;
+    let interfaces = INTERFACES.get_or_init(|| {
+        HashMap::from([
+            ("ei_connection", 1),
+            ("ei_callback", 1),
+            ("ei_pingpong", 1),
+            ("ei_seat", 1),
+            ("ei_device", 2),
+            ("ei_pointer", 1),
+            ("ei_pointer_absolute", 1),
+            ("ei_scroll", 1),
+            ("ei_button", 1),
+            ("ei_keyboard", 1),
+            ("ei_touchscreen", 1),
+        ])
+    });
     let response = match reis::tokio::ei_handshake(
         &mut event_stream,
         "ashpd-mre",
         ei::handshake::ContextType::Receiver,
-        &INTERFACES,
+        interfaces,
     )
     .await
     {
@@ -166,10 +165,10 @@ async fn ic() -> Result<()> {
         }
 
         log::info!("releasing input capture");
-        let (x, y) = activated.cursor_position();
+        let (x, y) = activated.cursor_position().unwrap();
         let cp = (x as f64 + 10., y as f64);
         input_capture
-            .release(&session, activated.activation_id(), cp)
+            .release(&session, activated.activation_id(), Some(cp))
             .await
             .unwrap();
     }

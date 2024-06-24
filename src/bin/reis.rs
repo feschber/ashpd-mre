@@ -6,7 +6,6 @@ use reis::{
     tokio::{EiConvertEventStream, EiEventStream},
 };
 use std::{collections::HashMap, os::unix::net::UnixStream, sync::OnceLock, time::Duration};
-use tokio;
 
 #[allow(unused)]
 enum Position {
