@@ -22,6 +22,7 @@ async fn main() -> ashpd::Result<()> {
     // terminate automatically after 10 seconds
     tokio::task::spawn(async {
         tokio::time::sleep(Duration::from_secs(10)).await;
+        eprintln!("exiting after 10 seconds");
         std::process::exit(1);
     });
 
@@ -29,7 +30,7 @@ async fn main() -> ashpd::Result<()> {
 
     let (session, _cap) = input_capture
         .create_session(
-            &ashpd::WindowIdentifier::default(),
+            None,
             Capabilities::Keyboard | Capabilities::Pointer | Capabilities::Touchscreen,
         )
         .await?;
