@@ -35,7 +35,7 @@ checksum = "37bf3594c4c988a53154954629820791dde498571819ae4ca50ca811e060cc95"
 [[package]]
 name = "ashpd"
 version = "0.9.0"
-source = "git+https://github.com/feschber/ashpd?branch=fix-zero-barrier-id-example#244027bf2a51c3162f0d9139ce584ddf802da1a4"
+source = "git+https://github.com/feschber/ashpd?branch=fix-zero-barrier-id-example#d9692a1432ec9b117b59cc51f3625c3975e3502c"
 dependencies = [
  "enumflags2",
  "futures-channel",

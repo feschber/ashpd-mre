@@ -1,4 +1,4 @@
-use ashpd::desktop::input_capture::{Barrier, Capabilities, InputCapture};
+use ashpd::desktop::input_capture::{Activated, Barrier, BarrierID, Capabilities, InputCapture};
 use futures::StreamExt;
 use reis::{
     ei::{self, keyboard::KeyState},
@@ -91,7 +91,7 @@ async fn main() -> ashpd::Result<()> {
                 Position::Top => (x, y, x + width - 1, y),
                 Position::Bottom => (x, y + height, x + width - 1, y + height),
             };
-            Barrier::new(id, barrier_pos)
+            Barrier::new(BarrierID::new(id).expect("barrier id must be non 0"), barrier_pos)
         })
         .collect::<Vec<_>>();
 
@@ -107,10 +107,13 @@ async fn main() -> ashpd::Result<()> {
 
     input_capture.enable(&session).await?;
 
-    let mut activate_stream = input_capture.receive_activated().await?;
+    // let mut activate_stream = input_capture.receive_activated().await?;
+    let mut stream = input_capture.receive_all_signals().await?;
 
     loop {
-        let activated = activate_stream.next().await.unwrap();
+        let signal = stream.next().await.unwrap();
+        let activated: Activated = signal.body().deserialize()?;
+        // let activated = activate_stream.next().await.unwrap();
 
         eprintln!("activated: {activated:?}");
         loop {
